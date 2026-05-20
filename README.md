@@ -54,6 +54,18 @@ docker compose up -d
 | `CONTEXT_MESSAGES` | no | `8` | Messages to remember per channel |
 | `HEALTH_CHECK_MINS` | no | `60` | How often to check if awake host is up |
 | `MIN_MODEL_SIZE_GB` | no | `3.0` | Ignore loaded models smaller than this |
+| `CONFIG_PATH` | no | `/app/config` | Host path to mount for config files (e.g. `prompts.yml`) |
+| `ADMIN_USER_ID` | no | | Your Discord user ID. Restricts `!wake`, `!reload`, `!clearctx` to you. |
+
+## Custom prompts
+
+You can customize Marmalade's personality without rebuilding. Copy `prompts.example.yml` to your config path as `prompts.yml`, edit it, and run `!reload` in Discord.
+
+```bash
+cp prompts.example.yml /your/config/path/prompts.yml
+# edit prompts.yml
+# then type !reload in Discord
+```
 
 ## Commands
 
@@ -61,6 +73,7 @@ docker compose up -d
 |---------|-------------|
 | `!status` | Shows current state, model, and source |
 | `!wake` | Forces an immediate health check |
+| `!reload` | Reloads prompts from `prompts.yml` without restarting |
 | `!clearctx` | Clears message history for the channel |
 
 ## License

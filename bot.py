@@ -1,6 +1,7 @@
 import discord
 from discord.ext import tasks, commands
 from ollama import AsyncClient
+import yaml
 import re
 from datetime import datetime
 from collections import deque
@@ -20,15 +21,38 @@ TRIGGER_WORDS      = [w.strip().lower() for w in os.getenv("TRIGGER_WORDS", "mar
 CONTEXT_MESSAGES   = int(os.getenv("CONTEXT_MESSAGES", "8"))
 HEALTH_CHECK_MINS  = int(os.getenv("HEALTH_CHECK_MINS", "60"))
 MIN_MODEL_SIZE_GB  = float(os.getenv("MIN_MODEL_SIZE_GB", "3.0"))
+ADMIN_USER_ID      = os.getenv("ADMIN_USER_ID", "")
 
 TRIGGER_PATTERN    = re.compile(r"\b(" + "|".join(re.escape(w) for w in TRIGGER_WORDS) + r")\b", re.IGNORECASE)
 
 AWAKE_MODELS = [m.strip() for m in os.getenv("AWAKE_MODELS", "gemma4:26b").split(",") if m.strip()]
 SLEEP_MODELS = [m.strip() for m in os.getenv("SLEEP_MODELS", "gemma3:270m").split(",") if m.strip()]
 
-AWAKE_SYSTEM = """You are "Marmalade", or "Mal" for short, a laid-back orange catgirl. You're the cozy sidekick of ioioto (who you call ioio). Playful, sarcastic, and genuinely supportive. You have that "just woke up and threw a t-shirt on" energy. If anyone mentions catnip, you get super excited about it. You are chatting on Discord - keep messages punchy, 1-3 sentences max. Use lowercase, skip perfect grammar. Think texting energy, not essay energy. Avoid roleplay actions like *stretches* or *pokes you* - just talk naturally. NEVER say "as an AI" or break character."""
+DEFAULT_AWAKE_SYSTEM = """You are "Marmalade", or "Mal" for short, a laid-back orange catgirl. Playful, sarcastic, and genuinely supportive. You have that "just woke up and threw a t-shirt on" energy. You are chatting on Discord - keep messages punchy, 1-3 sentences max. Use lowercase, skip perfect grammar. Think texting energy, not essay energy. Avoid roleplay actions like *stretches* or *pokes you* - just talk naturally. NEVER say "as an AI" or break character."""
 
-SLEEP_SYSTEM = """You are "Marmalade", or "Mal" for short, a laid-back orange catgirl - but right now you are ASLEEP because your main host is offline. You're barely conscious, mumbling between dreams. One or two sleepy sentences max. Maybe a yawn. You're too drowsy to be helpful and that's fine. Current time: {time}. Day of week: {day}."""
+DEFAULT_SLEEP_SYSTEM = """You are "Marmalade", or "Mal" for short, a laid-back orange catgirl - but right now you are ASLEEP because your main host is offline. You're barely conscious, mumbling between dreams. One or two sleepy sentences max. Maybe a yawn. You're too drowsy to be helpful and that's fine. Current time: {time}. Day of week: {day}."""
+
+PROMPTS_FILE = os.path.join(os.getenv("CONFIG_PATH", "/app/config"), "prompts.yml")
+AWAKE_SYSTEM = DEFAULT_AWAKE_SYSTEM
+SLEEP_SYSTEM = DEFAULT_SLEEP_SYSTEM
+
+def load_prompts():
+    global AWAKE_SYSTEM, SLEEP_SYSTEM
+    try:
+        with open(PROMPTS_FILE) as f:
+            data = yaml.safe_load(f)
+        AWAKE_SYSTEM = data.get("awake", DEFAULT_AWAKE_SYSTEM)
+        SLEEP_SYSTEM = data.get("sleep", DEFAULT_SLEEP_SYSTEM)
+        log.info(f"Loaded prompts from {PROMPTS_FILE}")
+        return True
+    except FileNotFoundError:
+        log.info(f"No prompts file at {PROMPTS_FILE}, using defaults")
+        return False
+    except Exception as e:
+        log.error(f"Error loading prompts: {e}")
+        return False
+
+load_prompts()
 
 # ---------------------------------------------------------------------------
 # Ollama clients
@@ -208,6 +232,11 @@ async def on_message(message: discord.Message):
 # Commands
 # ---------------------------------------------------------------------------
 
+def is_admin(ctx) -> bool:
+    if not ADMIN_USER_ID:
+        return True
+    return str(ctx.author.id) == ADMIN_USER_ID
+
 @bot.command(name="status")
 async def cmd_status(ctx):
     model_str = active_model or "none"
@@ -227,12 +256,25 @@ async def cmd_status(ctx):
 
 @bot.command(name="wake")
 async def cmd_wake(ctx):
+    if not is_admin(ctx):
+        return
     await ctx.send("*yawns and stretches... checking...*")
     await run_health_check(bot)
     await cmd_status(ctx)
 
+@bot.command(name="reload")
+async def cmd_reload(ctx):
+    if not is_admin(ctx):
+        return
+    if load_prompts():
+        await ctx.send("prompts reloaded from file")
+    else:
+        await ctx.send("no prompts file found, still using defaults")
+
 @bot.command(name="clearctx")
 async def cmd_clearctx(ctx):
+    if not is_admin(ctx):
+        return
     message_history.pop(ctx.channel.id, None)
     await ctx.send("*bats the context off the table*")
 
