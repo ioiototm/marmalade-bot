@@ -1,0 +1,16 @@
+services:
+  marmalade-bot:
+    build: .
+    restart: unless-stopped
+    environment:
+      - DISCORD_TOKEN=${DISCORD_TOKEN}
+      - AWAKE_OLLAMA_URL=${AWAKE_OLLAMA_URL:-http://192.168.1.100:11434}
+      - SLEEP_OLLAMA_URL=${SLEEP_OLLAMA_URL:-http://host.docker.internal:11434}
+      - TRIGGER_WORDS=${TRIGGER_WORDS:-marmalade,mal}
+      - AWAKE_MODELS=${AWAKE_MODELS:-gemma4:26b,gemma3:27b,gemma4:e4b}
+      - SLEEP_MODELS=${SLEEP_MODELS:-gemma3:270m}
+      - CONTEXT_MESSAGES=${CONTEXT_MESSAGES:-8}
+      - HEALTH_CHECK_MINS=${HEALTH_CHECK_MINS:-60}
+      - MIN_MODEL_SIZE_GB=${MIN_MODEL_SIZE_GB:-3.0}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
