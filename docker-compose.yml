@@ -12,7 +12,6 @@ services:
       - CONTEXT_MESSAGES=${CONTEXT_MESSAGES:-8}
       - HEALTH_CHECK_MINS=${HEALTH_CHECK_MINS:-60}
       - MIN_MODEL_SIZE_GB=${MIN_MODEL_SIZE_GB:-3.0}
-      - CONFIG_PATH=${CONFIG_PATH:-/app/config}
     volumes:
       - ${CONFIG_PATH:-./config}:/app/config
     extra_hosts:
