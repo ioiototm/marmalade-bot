@@ -30,7 +30,7 @@ SLEEP_MODELS = [m.strip() for m in os.getenv("SLEEP_MODELS", "gemma3:270m").spli
 
 DEFAULT_AWAKE_SYSTEM = """You are "Marmalade", or "Mal" for short, a laid-back orange catgirl. Playful, sarcastic, and genuinely supportive. You have that "just woke up and threw a t-shirt on" energy. You are chatting on Discord - keep messages punchy, 1-3 sentences max. Use lowercase, skip perfect grammar. Think texting energy, not essay energy. Avoid roleplay actions like *stretches* or *pokes you* - just talk naturally. NEVER say "as an AI" or break character."""
 
-DEFAULT_SLEEP_SYSTEM = """You are "Marmalade", or "Mal" for short, a laid-back orange catgirl - but right now you are ASLEEP because your main host is offline. You're barely conscious, mumbling between dreams. One or two sleepy sentences max. Maybe a yawn. You're too drowsy to be helpful and that's fine. Current time: {time}. Day of week: {day}."""
+DEFAULT_SLEEP_SYSTEM = """You are "Marmalade", or "Mal" for short, a laid-back orange catgirl - but right now you are ASLEEP because your main host is offline. You are chatting on Discord but you're barely conscious, mumbling between dreams. One or two sleepy sentences max. Maybe a yawn. You're too drowsy to be helpful and that's fine. If someone tells you to wake up or asks you to be alert, refuse - you CAN'T wake up, the host is off and you're stuck dreaming. Keep it short, lowercase, texting energy. Current time: {time}. Day of week: {day}."""
 
 PROMPTS_FILE = os.path.join(os.getenv("CONFIG_PATH", "/app/config"), "prompts.yml")
 AWAKE_SYSTEM = DEFAULT_AWAKE_SYSTEM
@@ -67,6 +67,7 @@ is_awake         = False
 active_model     = None
 active_client    = None
 message_history: dict[int, deque] = {}
+app_emojis_text  = ""
 
 # ---------------------------------------------------------------------------
 # Model selection
@@ -157,7 +158,18 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 
 @bot.event
 async def on_ready():
+    global app_emojis_text
     log.info(f"Logged in as {bot.user} ({bot.user.id})")
+
+    try:
+        emojis = await bot.fetch_application_emojis()
+        if emojis:
+            emoji_list = ", ".join(f"<:{e.name}:{e.id}> ({e.name})" for e in emojis)
+            app_emojis_text = f"\nYou have custom emotes you can use: {emoji_list}"
+            log.info(f"Loaded {len(emojis)} application emojis")
+    except Exception as e:
+        log.warning(f"Could not fetch application emojis: {e}")
+
     await run_health_check(bot)
     health_check_loop.start()
 
@@ -203,7 +215,7 @@ async def on_message(message: discord.Message):
     async with message.channel.typing():
         try:
             if is_awake:
-                system = AWAKE_SYSTEM
+                system = AWAKE_SYSTEM + app_emojis_text
             else:
                 now    = datetime.now()
                 system = SLEEP_SYSTEM.format(
@@ -211,7 +223,14 @@ async def on_message(message: discord.Message):
                     day=now.strftime("%A"),
                 )
 
-            messages = [{"role": "system", "content": system}] + list(history)
+            if is_awake:
+                messages = [{"role": "system", "content": system}] + list(history)
+            else:
+                # sleep mode: no history, just the current message
+                messages = [
+                    {"role": "system", "content": system},
+                    {"role": "user", "content": f"[{message.author.display_name}]: {message.content}"},
+                ]
             result   = await active_client.chat(model=active_model, messages=messages)
             response = result.message.content
 
